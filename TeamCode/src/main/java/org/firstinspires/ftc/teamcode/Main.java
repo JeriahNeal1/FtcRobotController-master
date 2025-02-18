@@ -5,7 +5,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
-import com.qualcomm.robotcore.hardware.TouchSensor;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
@@ -55,7 +54,7 @@ public class Main extends OpMode {
     // ------------------------------
     DcMotor frontLeft, frontRight, backLeft, backRight;
     DcMotor liftMotor;
-    
+
     // Mechanism Servos (gamepad1)
     Servo clawRotate;      // Claw orientation servo (rotate to face ground/up)
     Servo clawGrab;        // Claw grabber servo (open/close)
@@ -65,13 +64,11 @@ public class Main extends OpMode {
     Servo intakeExtend1;   // Intake extender servo 1 (scissor mechanism)
     Servo intakeExtend2;   // Intake extender servo 2 (mirrors servo 1)
 
-    TouchSensor liftSensor;  // Touch sensor Object
-
     // ------------------------------
     // HuskyLens Manager (Wrapper for the GoBilda HuskyLens)
     // ------------------------------
     // private HuskyLensManager huskyLensManager;
-    
+
     // ------------------------------
     // Toggle Declarations for gamepad1 Buttons (ABX & D-Pad)
     // ------------------------------
@@ -79,12 +76,12 @@ public class Main extends OpMode {
     Toggle mechB = new Toggle();         // Claw Grab toggle (B)
     Toggle mechX = new Toggle();         // Claw Roll toggle (X)
     // (Y is now processed with a hold timer for reset.)
-    
+
     Toggle dpadUpToggle    = new Toggle(); // Depositor Claw Orientation (DPad Up)
     Toggle dpadDownToggle  = new Toggle(); // Depositor Claw Grab (DPad Down)
     Toggle dpadLeftToggle  = new Toggle(); // Optional fine adjustment (DPad Left)
     Toggle dpadRightToggle = new Toggle(); // Optional fine adjustment (DPad Right)
-        
+
     // ------------------------------
     // Preset Positions for Servos
     // ------------------------------
@@ -95,31 +92,33 @@ public class Main extends OpMode {
     final double CLAW_GRAB_OPEN        = 0.0;     // Claw grabber open.
     final double CLAW_ROLL_ANGLE       = 0;       // Claw roll for pickup angle.
     final double CLAW_ROLL_NEUTRAL     = 0.35;    // Neutral claw roll.
-    
+
     // Intake Extender presets (scissor mechanism):
     final double INTAKE_EXTENDER_HALF = 0.25;   // 50% extension.
     final double INTAKE_EXTENDER_RANGE = 0.36;
-    
+
     // Depositor presets:
     final double DEPOSIT_ORIENTATION_ALIGNED = 1.0;
     final double DEPOSIT_ORIENTATION_WALL = 0.25;
     final double DEPOSIT_ORIENTATION_RESET   = 0.4;
     final double DEPOSIT_GRAB_CLOSED         = 0.13;
     final double DEPOSIT_GRAB_OPEN           = 0.0;
-    
+
     // ------------------------------
     // Y Button Reset Hold Timer
     // ------------------------------
     private double yHoldStartTime = 0;
     private final double Y_RESET_HOLD_THRESHOLD = 0.5; // seconds
-    
+
     // Example voltage threshold (adjust as needed)
     final double SAFE_VOLTAGE_THRESHOLD = 11.0;
-    
+
     // Additional member variables...
     private double lastLeftPower = 0.0;
     private double lastRightPower = 0.0;
     private double lastLoopTime = 0.0;
+    final private double minIntakePosition = 0.05;
+    final private double intakeRestPos = 0.2;
 
     private double lastIntakeCommandedPosition = INTAKE_EXTENDER_HALF;  // starting from half-extended
     private double intakeExtenderPosition = INTAKE_EXTENDER_RANGE;
@@ -136,10 +135,20 @@ public class Main extends OpMode {
 
     public String deposit_position = "aligned";
 
+    // Lift-related constants
+    final int DEPOSIT_LIFT_HEIGHT = 1200; // Target encoder ticks for deposit height
+
+    // For detecting a rising edge on gamepad2.a (to trigger the auto pickup routine only once per press)
+    private boolean prevGamepad2A = false;
+
+    public boolean opModeIsActive() {
+        return true;
+    }
+
     public static class Toggle {
         public boolean toggled = false;
         public boolean previous = false;
-        
+
         /**
          * Update the toggle state; on a rising edge, flip the state.
          */
@@ -170,137 +179,6 @@ public class Main extends OpMode {
      * In a real TeleOp, consider using a state machine or 
      * non-blocking approach for smoother driver control.
      */
-    // public void autoIntakeAndDepositPiece() {
-    //     // ------------------------------
-    //     // 1) Check AI camera detection using the HuskyLens wrapper
-    //     // ------------------------------
-    //     // if (!huskyLensManager.seesObject()) {
-    //     //     telemetry.addData("Auto-Grab", "No object detected. Cancelling routine.");
-    //     //     telemetry.update();
-    //     //     return;
-    //     // }
-    //     telemetry.addData("Auto-Grab", "Target Detected! Starting routine.");
-    //     telemetry.update();
-        
-    //     // ------------------------------
-    //     // 2) Extend & Orient Intake for Pickup
-    //     // ------------------------------
-    //     clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
-    //     clawRoll.setPosition(CLAW_ROLL_ANGLE);
-    //     // moveIntakeTo(0.8 * INTAKE_EXTENDER_RANGE);
-    //     sleep(500);
-        
-    //     // ------------------------------
-    //     // 3) Grab the Game Piece
-    //     // ------------------------------
-    //     clawGrab.setPosition(CLAW_GRAB_CLOSED);
-    //     telemetry.addData("Auto-Grab", "Claw closed around piece");
-    //     telemetry.update();
-    //     sleep(300);
-        
-    //     // ------------------------------
-    //     // 4) Retract Intake & Prepare the Depositor
-    //     // ------------------------------
-    //     depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
-    //     // Use the current deposit_position variable to set the depositor orientation.
-    //     if (deposit_position.equals("aligned")) {
-    //         depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
-    //     } else if (deposit_position.equals("wall")) {
-    //         depositRotate.setPosition(DEPOSIT_ORIENTATION_WALL);
-    //     } else if (deposit_position.equals("reset")) {
-    //         depositRotate.setPosition(DEPOSIT_ORIENTATION_RESET);
-    //     }
-    //     moveIntakeTo(0.2);
-    //     sleep(700);
-        
-    //     // ------------------------------
-    //     // 5) Handoff to the Depositor
-    //     // ------------------------------
-    //     depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
-    //     sleep(300);
-    //     clawGrab.setPosition(CLAW_GRAB_OPEN);
-    //     clawRotate.setPosition(CLAW_ORIENTATION_UP);
-    //     moveIntakeTo(0.4);
-    //     sleep(300);
-        
-    //     // ------------------------------
-    //     // 6) Lift & Deposit
-    //     // ------------------------------
-    //     liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-    //     liftMotor.setPower(0.8);
-    //     sleep(1200);
-    //     liftMotor.setPower(0);
-    //     // Ensure the depositor is in its reset position
-    //     depositRotate.setPosition(DEPOSIT_ORIENTATION_RESET);
-    //     sleep(500);
-    //     depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
-    //     telemetry.addData("Auto-Grab", "Piece deposited!");
-    //     telemetry.update();
-    //     sleep(300);
-        
-    //     // ------------------------------
-    //     // 7) Lower the Lift to the Bottom Using the REV Touch Sensor
-    //     // ------------------------------
-    //     telemetry.addData("Reset Lift", "Lowering lift to bottom...");
-    //     telemetry.update();
-    //     // Begin lowering the lift:
-    //     liftMotor.setPower(-0.5);
-    //     // Since the REV touch sensor returns true when not pressed and false when pressed,
-    //     // we wait until getState() becomes false.
-    //     while(liftTouchSensor.getState()) {
-    //         sleep(50); // Check every 50 milliseconds.
-    //     }
-    //     // Stop the lift motor when the sensor is triggered.
-    //     liftMotor.setPower(0);
-    //     // Reset the encoder so that the current (fully lowered) position is zero.
-    //     liftMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-    //     liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-    //     telemetry.addData("Reset Lift", "Lift reset to bottom.");
-    //     telemetry.update();
-    // }
-
-    public void ResetLiftPos() {
-
-    }
-
-    public void HandoffSequence() {
-        // ------------------------------
-        //Rotate Claw into recovery position
-        // ------------------------------
-
-        // ------------------------------
-        // Flip The Claw Back
-        // ------------------------------
-
-        // ------------------------------
-        // Set Motor Lift Height to 0
-        // ------------------------------
-
-        // ------------------------------
-        // Set Deposit Claw to Closed
-        // ------------------------------
-
-        // ------------------------------
-        // Set Deposit Claw Positioner to Aligned
-        // ------------------------------
-
-        // ------------------------------
-        // Set Deposit Claw to Open
-        // ------------------------------
-
-        // ------------------------------
-        // Set Intake Positions to 0
-        // ------------------------------
-
-        // ------------------------------
-        // Set Deposit Claw to Close
-        // ------------------------------
-
-        // ------------------------------
-        // Set Intake Claw to Open
-        // ------------------------------
-    }
-    
     /**
      * Helper function to move the intake servo system to a specific position.
      *
@@ -311,25 +189,12 @@ public class Main extends OpMode {
         intakeExtend1.setPosition(target);
         intakeExtend2.setPosition(target);
     }
-    
-    /**
-     * Simple blocking sleep method using Java's built-in Thread.sleep.
-     *
-     * @param millis The duration in milliseconds to pause.
-     */
-    private void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        }
-    }
-    
+
     // Odometry Computer: GoBilda Pinpoint device configured in the robot configuration as "odo"
     GoBildaPinpointDriver odo;
 
     FtcDashboard dashboard;
-    
+
     @Override
     public void init() {
         // ------------------------------
@@ -341,7 +206,7 @@ public class Main extends OpMode {
         backRight  = hardwareMap.get(DcMotor.class, "back_right");
         liftMotor  = hardwareMap.get(DcMotor.class, "lift_motor");
 
-        
+
         frontLeft.setDirection(DcMotor.Direction.FORWARD);
         backLeft.setDirection(DcMotor.Direction.FORWARD);
         frontRight.setDirection(DcMotor.Direction.FORWARD);
@@ -362,12 +227,10 @@ public class Main extends OpMode {
         depositGrab   = hardwareMap.get(Servo.class, "deposit_grab");
         intakeExtend1 = hardwareMap.get(Servo.class, "intake_extend1");
         intakeExtend2 = hardwareMap.get(Servo.class, "intake_extend2");
-        
+
         intakeExtend1.setDirection(Servo.Direction.REVERSE);
         intakeExtend2.setDirection(Servo.Direction.FORWARD);
         clawRoll.setDirection(Servo.Direction.FORWARD);
-
-        liftSensor = hardwareMap.get(TouchSensor.class, "lift_touch_sensor");
 
         // ------------------------------
         // Initialize the GoBilda® Pinpoint Odometry Computer
@@ -388,7 +251,7 @@ public class Main extends OpMode {
         telemetry.addData("Status", "Initialized");
         telemetry.update();
     }
-    
+
     @Override
     public void loop() {
         double currentTime = getRuntime();
@@ -412,7 +275,7 @@ public class Main extends OpMode {
         // TelemetryPacket packet = new TelemetryPacket();
         // packet.put("HuskyLens Data", data);
         // dashboard.sendTelemetryPacket(packet);
-        
+
         // ------------------------------
         // Safety Mode (monitor battery)
         // ------------------------------
@@ -420,7 +283,7 @@ public class Main extends OpMode {
         double batteryVoltage = batterySensor.getVoltage();
         boolean safetyMode = batteryVoltage < SAFE_VOLTAGE_THRESHOLD;
         double safetyScaleFactor = safetyMode ? 0.6 : 1.0;
-        
+
         // ------------------------------
         // Drive Controls with Tank Drive and Strafing
         // ------------------------------
@@ -438,14 +301,14 @@ public class Main extends OpMode {
         backLeft.setPower((leftPower - strafePower) * safetyScaleFactor);
         frontRight.setPower((rightPower - strafePower) * safetyScaleFactor);
         backRight.setPower((rightPower + strafePower) * safetyScaleFactor);
-        
+
         // ------------------------------
         // Update Toggle States for Mechanisms (gamepad1)
         // ------------------------------
         mechA.update(gamepad1.a);
         mechB.update(gamepad1.b);
         mechX.update(gamepad1.x);
-        
+
         dpadUpToggle.update(gamepad1.dpad_up);
         dpadLeftToggle.update(gamepad1.dpad_left);
         dpadRightToggle.update(gamepad1.dpad_right);
@@ -482,14 +345,14 @@ public class Main extends OpMode {
             }
 
             if (mechX.toggled) {
-                clawGrab.setPosition(CLAW_GRAB_CLOSED);
-            } else {
                 clawGrab.setPosition(CLAW_GRAB_OPEN);
+            } else {
+                clawGrab.setPosition(CLAW_GRAB_CLOSED);
             }
 
             double joystickX = gamepad2.right_stick_x;
             final double DEADZONE = 0.05;
-            
+
             if (Math.abs(joystickX) > DEADZONE) {
                 claw_rolling = true;
             } else if (gamepad1.b) {
@@ -516,14 +379,14 @@ public class Main extends OpMode {
         double rawRt = gamepad1.right_trigger;
         double triggerDeadzone = 0.05;
         double filteredRT = Math.abs(rawRt) < triggerDeadzone ? 0 : rawRt;
-        
+
         double targetExtenderPosition = scaleExtenderInput(filteredRT);
         intakeExtenderPosition = rampServoValue(targetExtenderPosition, lastIntakeCommandedPosition, deltaTime);
         lastIntakeCommandedPosition = intakeExtenderPosition;
-        
+
         intakeExtend1.setPosition(intakeExtenderPosition);
         intakeExtend2.setPosition(intakeExtenderPosition);
-        
+
         // ------------------------------
         // Depositor Mechanism Controls (Now on gamepad2)
         // ------------------------------
@@ -580,10 +443,10 @@ public class Main extends OpMode {
         // ------------------------------
         // Auto-Grab (A on gamepad2)
         // ------------------------------
-        if (gamepad2.a) {
-            telemetry.addData("Auto-Grab", "Auto routine started");
-            telemetry.update();
+        if (gamepad2.a && !prevGamepad2A) {
+            autoIntakeAndDepositPiece();
         }
+        prevGamepad2A = gamepad2.a;
 
         // ------------------------------
         // Telemetry for Driver Feedback
@@ -604,22 +467,22 @@ public class Main extends OpMode {
         telemetry.addData("Deposit Grab (DPad Down)", dpadDownToggle.toggled);
         telemetry.update();
     }
-    
+
     /**
      * Cubic scaling for drive input for refined control at low speeds.
      */
     private double scaleDriveInput(double input) {
         return input * input * input;
     }
-    
+
     /**
      * Scale the right trigger input into the allowed intake extender range.
      */
     private double scaleExtenderInput(double rt) {
-        double min = 0.1;
+        double min = Math.max(minIntakePosition, 0.1);  // Use the larger of minIntakePosition or 0.1
         double max = INTAKE_EXTENDER_RANGE;
         double mid = (min + max) / 2.0;
-        
+
         if (rt < 0.1) {
             return min;
         } else if (rt < 0.5) {
@@ -640,7 +503,47 @@ public class Main extends OpMode {
         if (Math.abs(delta) > maxDelta) {
             delta = Math.signum(delta) * maxDelta;
         }
-        return current + delta;
+        return Math.max(minIntakePosition, current + delta);
+    }
+
+    public void sleep() {
+    }
+
+    /**
+     * Performs the auto routine for picking up and depositing a game piece.
+     * It uses encoder-controlled lift movement and resets the lift using the TouchSensor.
+     */
+    public void autoIntakeAndDepositPiece() {
+        telemetry.addData("Auto-Grab", "Target detected! Starting routine.");
+        telemetry.update();
+
+        // 1) Extend & Orient Intake for Pickup
+        moveIntakeTo(0.2);
+        depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
+        clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
+        clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+        Sleeper.sleep(500);
+
+        // 2) Grab the Game Piece
+        clawGrab.setPosition(CLAW_GRAB_CLOSED);
+        telemetry.addData("Auto-Grab", "Claw closed around piece");
+        telemetry.update();
+        Sleeper.sleep(300);
+
+        depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
+        moveIntakeTo(0);
+        Sleeper.sleep(700);
+
+        // 4) Handoff to the Depositor
+        depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
+        Sleeper.sleep(300);
+        clawGrab.setPosition(CLAW_GRAB_OPEN);
+
+//        Make sure to set toggles properly so that servos retain position after sequence finishes
+        dpadDownToggle.toggled = false;
+        mechA.toggled = true;
+        
+        moveIntakeTo(0.2);
+        Sleeper.sleep(300);
     }
 }
-
