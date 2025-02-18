@@ -255,7 +255,7 @@ public class Main extends OpMode {
         // ------------------------------
         // Initialize Part State Manager
         // ------------------------------
-        partStateManager = new PartStateManager(clawRotate, clawGrab, clawRoll, depositRotate, depositGrab, intakeExtend1, intakeExtend2);
+        partStateManager = new PartStateManager(clawRotate, clawGrab, clawRoll, depositRotate, depositGrab, intakeExtend1, intakeExtend2, mechA, mechB, mechX, dpadDownToggle); // Pass Toggle objects
         partStateManager.resetAll(); // Initialize to default/reset state
 
         telemetry.addData("Status", "Initialized");
@@ -323,6 +323,13 @@ public class Main extends OpMode {
         dpadLeftToggle.update(gamepad1.dpad_left);
         dpadRightToggle.update(gamepad1.dpad_right);
 
+        // Update Part State Manager with Toggle states after updating Toggles
+        partStateManager.setMechAToggled(mechA.toggled);
+        partStateManager.setMechBToggled(mechB.toggled);
+        partStateManager.setMechXToggled(mechX.toggled);
+        partStateManager.setDpadDownToggled(dpadDownToggle.toggled);
+
+
         // ------------------------------
         // Process Y Button Reset (Requires a Hold)
         // ------------------------------
@@ -342,9 +349,6 @@ public class Main extends OpMode {
         // ------------------------------
         if (yReset) {
             partStateManager.resetAll(); // Reset all states via manager
-            mechA.toggled = false;;
-            mechB.toggled = false;
-            mechX.toggled = false;
         } else {
             if (mechA.toggled) {
                 partStateManager.setClawRotatePosition(CLAW_ORIENTATION_DOWN);
@@ -483,12 +487,12 @@ public class Main extends OpMode {
         telemetry.addData("Target Extender Pos", "%.2f", targetExtenderPosition);
         telemetry.addData("Commanded Extender Pos", "%.2f", intakeExtenderPosition);
         telemetry.addData("Delta Time", "%.2f", deltaTime);
-        telemetry.addData("Claw Orientation (A)", mechA.toggled);
-        telemetry.addData("Claw Grab (B)", mechB.toggled);
-        telemetry.addData("Claw Roll (X)", mechX.toggled);
+        telemetry.addData("Claw Orientation (A)", partStateManager.getMechAToggled()); // Get toggle state from manager
+        telemetry.addData("Claw Grab (B)", partStateManager.getMechBToggled()); // Get toggle state from manager
+        telemetry.addData("Claw Roll (X)", partStateManager.getMechXToggled()); // Get toggle state from manager
         telemetry.addData("Y Reset Held", yReset);
-        telemetry.addData("Deposit Orientation (DPad Up)", dpadUpToggle.toggled);
-        telemetry.addData("Deposit Grab (DPad Down)", dpadDownToggle.toggled);
+        telemetry.addData("Deposit Orientation (DPad Up)", partStateManager.getDpadDownToggled()); // Get toggle state from manager
+        telemetry.addData("Deposit Grab (DPad Down)", dpadDownToggle.toggled); // Dpad Down Toggle is not managed yet - keep direct access for now
         telemetry.update();
     }
 
@@ -564,8 +568,9 @@ public class Main extends OpMode {
         partStateManager.setClawGrabPosition(CLAW_GRAB_OPEN); // Use PartStateManager
 
         //        Make sure to set toggles properly so that servos retain position after sequence finishes
-        dpadDownToggle.toggled = false;
-        mechA.toggled = true;
+        partStateManager.setDpadDownToggled(false); // Use State Manager to set toggle state
+        partStateManager.setMechAToggled(true);     // Use State Manager to set toggle state
+
 
         moveIntakeTo(0.2);
         Sleeper.sleep(300);
@@ -579,8 +584,13 @@ public class Main extends OpMode {
     private class PartStateManager {
         private Servo clawRotate, clawGrab, clawRoll, depositRotate, depositGrab, intakeExtend1, intakeExtend2;
         private double clawRotatePosition, clawGrabPosition, clawRollPosition, depositRotatePosition, depositGrabPosition, intakeExtendPosition;
+        private boolean mechAToggledState = false; // Add toggle states to manager
+        private boolean mechBToggledState = false;
+        private boolean mechXToggledState = false;
+        private boolean dpadDownToggledState = false;
+        public Toggle mechA, mechB, mechX, dpadDownToggle; // Store Toggle objects
 
-        public PartStateManager(Servo clawRotate, Servo clawGrab, Servo clawRoll, Servo depositRotate, Servo depositGrab, Servo intakeExtend1, Servo intakeExtend2) {
+        public PartStateManager(Servo clawRotate, Servo clawGrab, Servo clawRoll, Servo depositRotate, Servo depositGrab, Servo intakeExtend1, Servo intakeExtend2, Toggle mechA, Toggle mechB, Toggle mechX, Toggle dpadDownToggle) { // Pass Toggle objects in constructor
             this.clawRotate = clawRotate;
             this.clawGrab = clawGrab;
             this.clawRoll = clawRoll;
@@ -588,6 +598,10 @@ public class Main extends OpMode {
             this.depositGrab = depositGrab;
             this.intakeExtend1 = intakeExtend1;
             this.intakeExtend2 = intakeExtend2;
+            this.mechA = mechA; // Store Toggle objects
+            this.mechB = mechB;
+            this.mechX = mechX;
+            this.dpadDownToggle = dpadDownToggle;
         }
 
         public void setClawRotatePosition(double position) {
@@ -614,6 +628,20 @@ public class Main extends OpMode {
             this.intakeExtendPosition = position;
         }
 
+        // Setter and Getter for Toggle States
+        public void setMechAToggled(boolean toggled) { this.mechAToggledState = toggled; }
+        public boolean getMechAToggled() { return mechAToggledState; }
+
+        public void setMechBToggled(boolean toggled) { this.mechBToggledState = toggled; }
+        public boolean getMechBToggled() { return mechBToggledState; }
+
+        public void setMechXToggled(boolean toggled) { this.mechXToggledState = toggled; }
+        public boolean getMechXToggled() { return mechXToggledState; }
+
+        public void setDpadDownToggled(boolean toggled) { this.dpadDownToggledState = toggled; }
+        public boolean getDpadDownToggled() { return dpadDownToggledState; }
+
+
         public void resetAll() {
             clawRotatePosition = CLAW_ORIENTATION_UP;
             clawGrabPosition = CLAW_GRAB_OPEN;
@@ -621,6 +649,10 @@ public class Main extends OpMode {
             depositRotatePosition = DEPOSIT_ORIENTATION_RESET;
             depositGrabPosition = DEPOSIT_GRAB_OPEN;
             intakeExtendPosition = INTAKE_EXTENDER_HALF;
+            mechAToggledState = false; // Reset toggle states in manager
+            mechBToggledState = false;
+            mechXToggledState = false;
+            dpadDownToggledState = false;
         }
 
         public void applyStates() {
@@ -631,6 +663,11 @@ public class Main extends OpMode {
             depositGrab.setPosition(depositGrabPosition);
             intakeExtend1.setPosition(intakeExtendPosition);
             intakeExtend2.setPosition(intakeExtendPosition);
+
+            mechA.toggled = mechAToggledState; // Apply toggle states to Toggle objects
+            mechB.toggled = mechBToggledState;
+            mechX.toggled = mechXToggledState;
+            dpadDownToggle.toggled = dpadDownToggledState;
         }
     }
 }
