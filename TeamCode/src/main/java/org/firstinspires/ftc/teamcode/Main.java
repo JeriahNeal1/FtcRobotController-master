@@ -140,6 +140,12 @@ public class Main extends OpMode {
 
     // For detecting a rising edge on gamepad2.a (to trigger the auto pickup routine only once per press)
     private boolean prevGamepad2A = false;
+    private Thread autoRoutineThread = null; // Declare a thread variable
+
+    // ------------------------------
+    // Part State Manager
+    // ------------------------------
+    private PartStateManager partStateManager;
 
     public boolean opModeIsActive() {
         return true;
@@ -176,7 +182,7 @@ public class Main extends OpMode {
      *   5) Raise + drop the piece in the bucket
      *
      * NOTE: This is a blocking routine for demonstration.
-     * In a real TeleOp, consider using a state machine or 
+     * In a real TeleOp, consider using a state machine or
      * non-blocking approach for smoother driver control.
      */
     /**
@@ -185,9 +191,7 @@ public class Main extends OpMode {
      * @param position A value between 0.0 and 1.0 representing the desired servo position.
      */
     private void moveIntakeTo(double position) {
-        double target = Math.max(0.0, Math.min(1.0, position));
-        intakeExtend1.setPosition(target);
-        intakeExtend2.setPosition(target);
+        partStateManager.setIntakeExtendPosition(position); // Use PartStateManager
     }
 
     // Odometry Computer: GoBilda Pinpoint device configured in the robot configuration as "odo"
@@ -247,6 +251,12 @@ public class Main extends OpMode {
         // Initialize Dashboard
         // ------------------------------
         dashboard = FtcDashboard.getInstance();
+
+        // ------------------------------
+        // Initialize Part State Manager
+        // ------------------------------
+        partStateManager = new PartStateManager(clawRotate, clawGrab, clawRoll, depositRotate, depositGrab, intakeExtend1, intakeExtend2);
+        partStateManager.resetAll(); // Initialize to default/reset state
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
@@ -331,23 +341,21 @@ public class Main extends OpMode {
         // Main Claw Mechanism Actions
         // ------------------------------
         if (yReset) {
-            clawRotate.setPosition(CLAW_ORIENTATION_UP);
-            clawGrab.setPosition(CLAW_GRAB_OPEN);
-            clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+            partStateManager.resetAll(); // Reset all states via manager
             mechA.toggled = false;;
             mechB.toggled = false;
             mechX.toggled = false;
         } else {
             if (mechA.toggled) {
-                clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
+                partStateManager.setClawRotatePosition(CLAW_ORIENTATION_DOWN);
             } else {
-                clawRotate.setPosition(CLAW_ORIENTATION_UP);
+                partStateManager.setClawRotatePosition(CLAW_ORIENTATION_UP);
             }
 
             if (mechX.toggled) {
-                clawGrab.setPosition(CLAW_GRAB_OPEN);
+                partStateManager.setClawGrabPosition(CLAW_GRAB_OPEN);
             } else {
-                clawGrab.setPosition(CLAW_GRAB_CLOSED);
+                partStateManager.setClawGrabPosition(CLAW_GRAB_CLOSED);
             }
 
             double joystickX = gamepad2.right_stick_x;
@@ -361,16 +369,16 @@ public class Main extends OpMode {
 
             if (!claw_rolling) {
                 if (mechB.toggled) {
-                    clawRoll.setPosition(CLAW_ROLL_ANGLE);
+                    partStateManager.setClawRollPosition(CLAW_ROLL_ANGLE);
                 } else {
-                    clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+                    partStateManager.setClawRollPosition(CLAW_ROLL_NEUTRAL);
                 }
             } else {
-                double currentPosition = clawRoll.getPosition();
+                double currentPosition = clawRoll.getPosition(); // Get current hardware position for manual adjust
                 double scaledInput = joystickX * 0.05;
                 double newPosition = currentPosition + scaledInput;
                 newPosition = Math.min(Math.max(newPosition, 0), 1);
-                clawRoll.setPosition(newPosition);
+                partStateManager.setClawRollPosition(newPosition); // Update state manager with manual roll
             }
         }
         // ------------------------------
@@ -384,8 +392,7 @@ public class Main extends OpMode {
         intakeExtenderPosition = rampServoValue(targetExtenderPosition, lastIntakeCommandedPosition, deltaTime);
         lastIntakeCommandedPosition = intakeExtenderPosition;
 
-        intakeExtend1.setPosition(intakeExtenderPosition);
-        intakeExtend2.setPosition(intakeExtenderPosition);
+        partStateManager.setIntakeExtendPosition(intakeExtenderPosition); // Use PartStateManager
 
         // ------------------------------
         // Depositor Mechanism Controls (Now on gamepad2)
@@ -401,25 +408,25 @@ public class Main extends OpMode {
         }
 
         if (Objects.equals(deposit_position, "aligned")) {
-            depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
+            partStateManager.setDepositRotatePosition(DEPOSIT_ORIENTATION_ALIGNED);
         } else if (Objects.equals(deposit_position, "wall")) {
-            depositRotate.setPosition(DEPOSIT_ORIENTATION_WALL);
+            partStateManager.setDepositRotatePosition(DEPOSIT_ORIENTATION_WALL);
         } else if (Objects.equals(deposit_position, "reset")) {
-            depositRotate.setPosition(DEPOSIT_ORIENTATION_RESET);
+            partStateManager.setDepositRotatePosition(DEPOSIT_ORIENTATION_RESET);
         }
 
         if (dpadDownToggle.toggled) {
-            depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
+            partStateManager.setDepositGrabPosition(DEPOSIT_GRAB_OPEN);
         } else {
-            depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
+            partStateManager.setDepositGrabPosition(DEPOSIT_GRAB_CLOSED);
         }
 
-        // Manual claw roll control using gamepad2 left stick X
+        // Manual claw roll control using gamepad2 left stick X (already using state manager)
         final double ROLL_ADJUSTMENT_SPEED = 0.002;
         double leftStickX = gamepad2.left_stick_x;
         if (Math.abs(leftStickX) > 0.05) {
-            double currentPos = clawRoll.getPosition();
-            clawRoll.setPosition(Math.min(1, Math.max(0, currentPos + (leftStickX * ROLL_ADJUSTMENT_SPEED))));
+            double currentPos = clawRoll.getPosition(); // Get current hardware position for manual adjust
+            partStateManager.setClawRollPosition(Math.min(1, Math.max(0, currentPos + (leftStickX * ROLL_ADJUSTMENT_SPEED))));
             claw_rolling = true;
         }
 
@@ -444,9 +451,26 @@ public class Main extends OpMode {
         // Auto-Grab (A on gamepad2)
         // ------------------------------
         if (gamepad2.a && !prevGamepad2A) {
-            autoIntakeAndDepositPiece();
+            // Check if the auto routine thread is already running
+            if (autoRoutineThread == null || !autoRoutineThread.isAlive()) {
+                // Create and start a new thread for the auto routine
+                autoRoutineThread = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        autoIntakeAndDepositPiece();
+                    }
+                });
+                autoRoutineThread.start();
+            } else {
+                telemetry.addData("Auto-Grab", "Auto routine already running.");
+            }
         }
         prevGamepad2A = gamepad2.a;
+
+        // ------------------------------
+        // Apply states from Part State Manager to hardware
+        // ------------------------------
+        partStateManager.applyStates();
 
         // ------------------------------
         // Telemetry for Driver Feedback
@@ -519,31 +543,94 @@ public class Main extends OpMode {
 
         // 1) Extend & Orient Intake for Pickup
         moveIntakeTo(0.2);
-        depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
-        clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
-        clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+        partStateManager.setDepositGrabPosition(DEPOSIT_GRAB_OPEN); // Use PartStateManager
+        partStateManager.setClawRotatePosition(CLAW_ORIENTATION_DOWN); // Use PartStateManager
+        partStateManager.setClawRollPosition(CLAW_ROLL_NEUTRAL); // Use PartStateManager
         Sleeper.sleep(500);
 
         // 2) Grab the Game Piece
-        clawGrab.setPosition(CLAW_GRAB_CLOSED);
+        partStateManager.setClawGrabPosition(CLAW_GRAB_CLOSED); // Use PartStateManager
         telemetry.addData("Auto-Grab", "Claw closed around piece");
         telemetry.update();
         Sleeper.sleep(300);
 
-        depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
+        partStateManager.setDepositRotatePosition(DEPOSIT_ORIENTATION_ALIGNED); // Use PartStateManager
         moveIntakeTo(0);
         Sleeper.sleep(700);
 
         // 4) Handoff to the Depositor
-        depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
+        partStateManager.setDepositGrabPosition(DEPOSIT_GRAB_CLOSED); // Use PartStateManager
         Sleeper.sleep(300);
-        clawGrab.setPosition(CLAW_GRAB_OPEN);
+        partStateManager.setClawGrabPosition(CLAW_GRAB_OPEN); // Use PartStateManager
 
-//        Make sure to set toggles properly so that servos retain position after sequence finishes
+        //        Make sure to set toggles properly so that servos retain position after sequence finishes
         dpadDownToggle.toggled = false;
         mechA.toggled = true;
-        
+
         moveIntakeTo(0.2);
         Sleeper.sleep(300);
+        telemetry.addData("Auto-Grab", "Auto routine finished.");
+        telemetry.update();
+    }
+
+    // ------------------------------
+    // PartStateManager Class Definition
+    // ------------------------------
+    private class PartStateManager {
+        private Servo clawRotate, clawGrab, clawRoll, depositRotate, depositGrab, intakeExtend1, intakeExtend2;
+        private double clawRotatePosition, clawGrabPosition, clawRollPosition, depositRotatePosition, depositGrabPosition, intakeExtendPosition;
+
+        public PartStateManager(Servo clawRotate, Servo clawGrab, Servo clawRoll, Servo depositRotate, Servo depositGrab, Servo intakeExtend1, Servo intakeExtend2) {
+            this.clawRotate = clawRotate;
+            this.clawGrab = clawGrab;
+            this.clawRoll = clawRoll;
+            this.depositRotate = depositRotate;
+            this.depositGrab = depositGrab;
+            this.intakeExtend1 = intakeExtend1;
+            this.intakeExtend2 = intakeExtend2;
+        }
+
+        public void setClawRotatePosition(double position) {
+            this.clawRotatePosition = position;
+        }
+
+        public void setClawGrabPosition(double position) {
+            this.clawGrabPosition = position;
+        }
+
+        public void setClawRollPosition(double position) {
+            this.clawRollPosition = position;
+        }
+
+        public void setDepositRotatePosition(double position) {
+            this.depositRotatePosition = position;
+        }
+
+        public void setDepositGrabPosition(double position) {
+            this.depositGrabPosition = position;
+        }
+
+        public void setIntakeExtendPosition(double position) {
+            this.intakeExtendPosition = position;
+        }
+
+        public void resetAll() {
+            clawRotatePosition = CLAW_ORIENTATION_UP;
+            clawGrabPosition = CLAW_GRAB_OPEN;
+            clawRollPosition = CLAW_ROLL_NEUTRAL;
+            depositRotatePosition = DEPOSIT_ORIENTATION_RESET;
+            depositGrabPosition = DEPOSIT_GRAB_OPEN;
+            intakeExtendPosition = INTAKE_EXTENDER_HALF;
+        }
+
+        public void applyStates() {
+            clawRotate.setPosition(clawRotatePosition);
+            clawGrab.setPosition(clawGrabPosition);
+            clawRoll.setPosition(clawRollPosition);
+            depositRotate.setPosition(depositRotatePosition);
+            depositGrab.setPosition(depositGrabPosition);
+            intakeExtend1.setPosition(intakeExtendPosition);
+            intakeExtend2.setPosition(intakeExtendPosition);
+        }
     }
 }
