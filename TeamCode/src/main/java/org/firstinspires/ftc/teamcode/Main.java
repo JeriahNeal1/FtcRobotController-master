@@ -98,11 +98,11 @@ public class Main extends OpMode {
     final double INTAKE_EXTENDER_RANGE = 0.36;
 
     // Depositor presets:
-    final double DEPOSIT_ORIENTATION_ALIGNED = 0.95;
+    final double DEPOSIT_ORIENTATION_ALIGNED = 0.98;
     final double DEPOSIT_ORIENTATION_WALL = 0.25;
     final double DEPOSIT_ORIENTATION_RESET   = 0.4;
-    final double DEPOSIT_GRAB_CLOSED         = 0.18;
-    final double DEPOSIT_GRAB_OPEN           = 0.0;
+    final double DEPOSIT_GRAB_CLOSED         = 0.30;
+    final double DEPOSIT_GRAB_OPEN           = 0.03;
 
     // ------------------------------
     // Y Button Reset Hold Timer
@@ -365,12 +365,6 @@ public class Main extends OpMode {
                 } else {
                     clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
                 }
-            } else {
-                double currentPosition = clawRoll.getPosition();
-                double scaledInput = joystickX * 0.05;
-                double newPosition = currentPosition + scaledInput;
-                newPosition = Math.min(Math.max(newPosition, 0), 1);
-                clawRoll.setPosition(newPosition);
             }
         }
         // ------------------------------
@@ -536,7 +530,7 @@ public class Main extends OpMode {
 
         // 4) Handoff to the Depositor
         depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
-        Sleeper.sleep(100);
+        Sleeper.sleep(225);
         clawGrab.setPosition(CLAW_GRAB_OPEN);
 
 //        Make sure to set toggles properly so that servos retain position after sequence finishes
