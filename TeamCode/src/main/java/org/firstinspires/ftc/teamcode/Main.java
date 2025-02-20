@@ -73,8 +73,8 @@ public class Main extends OpMode {
     // Toggle Declarations for gamepad1 Buttons (ABX & D-Pad)
     // ------------------------------
     Toggle mechA = new Toggle();         // Claw Orientation toggle (A)
-    Toggle mechB = new Toggle();         // Claw Grab toggle (B)
-    Toggle mechX = new Toggle();         // Claw Roll toggle (X)
+    Toggle mechB = new Toggle();         // Claw Roll toggle (B
+    Toggle mechX = new Toggle();         // Claw Grab toggle (X)
     // (Y is now processed with a hold timer for reset.)
 
     Toggle dpadUpToggle    = new Toggle(); // Depositor Claw Orientation (DPad Up)
@@ -98,10 +98,10 @@ public class Main extends OpMode {
     final double INTAKE_EXTENDER_RANGE = 0.36;
 
     // Depositor presets:
-    final double DEPOSIT_ORIENTATION_ALIGNED = 1.0;
+    final double DEPOSIT_ORIENTATION_ALIGNED = 0.95;
     final double DEPOSIT_ORIENTATION_WALL = 0.25;
     final double DEPOSIT_ORIENTATION_RESET   = 0.4;
-    final double DEPOSIT_GRAB_CLOSED         = 0.13;
+    final double DEPOSIT_GRAB_CLOSED         = 0.18;
     final double DEPOSIT_GRAB_OPEN           = 0.0;
 
     // ------------------------------
@@ -118,7 +118,7 @@ public class Main extends OpMode {
     private double lastRightPower = 0.0;
     private double lastLoopTime = 0.0;
     final private double minIntakePosition = 0.05;
-    final private double intakeRestPos = 0.2;
+    final private double intakeRestPos = 0.22;
 
     private double lastIntakeCommandedPosition = INTAKE_EXTENDER_HALF;  // starting from half-extended
     private double intakeExtenderPosition = INTAKE_EXTENDER_RANGE;
@@ -292,9 +292,9 @@ public class Main extends OpMode {
         double strafePower = 0;
 
         if (gamepad1.left_bumper) {
-            strafePower = 0.8;
+            strafePower = 1;
         } else if (gamepad1.right_bumper) {
-            strafePower = -0.8;
+            strafePower = -1;
         }
 
         frontLeft.setPower((leftPower + strafePower) * safetyScaleFactor);
@@ -414,14 +414,14 @@ public class Main extends OpMode {
             depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
         }
 
-        // Manual claw roll control using gamepad2 left stick X
-        final double ROLL_ADJUSTMENT_SPEED = 0.002;
-        double leftStickX = gamepad2.left_stick_x;
-        if (Math.abs(leftStickX) > 0.05) {
-            double currentPos = clawRoll.getPosition();
-            clawRoll.setPosition(Math.min(1, Math.max(0, currentPos + (leftStickX * ROLL_ADJUSTMENT_SPEED))));
-            claw_rolling = true;
-        }
+//        // Manual claw roll control using gamepad2 left stick X
+//        final double ROLL_ADJUSTMENT_SPEED = 0.002;
+//        double leftStickX = gamepad2.left_stick_x;
+//        if (Math.abs(leftStickX) > 0.05) {
+//            double currentPos = clawRoll.getPosition();
+//            clawRoll.setPosition(Math.min(1, Math.max(0, currentPos + (leftStickX * ROLL_ADJUSTMENT_SPEED))));
+//            claw_rolling = true;
+//        }
 
         // ------------------------------
         // Lift Control (Now on gamepad2 - Right stick Y for up/down)
@@ -522,13 +522,13 @@ public class Main extends OpMode {
         depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
         clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
         clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
-        Sleeper.sleep(500);
+        Sleeper.sleep(150);
 
         // 2) Grab the Game Piece
         clawGrab.setPosition(CLAW_GRAB_CLOSED);
         telemetry.addData("Auto-Grab", "Claw closed around piece");
         telemetry.update();
-        Sleeper.sleep(300);
+        Sleeper.sleep(100);
 
         depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
         moveIntakeTo(0);
@@ -536,14 +536,16 @@ public class Main extends OpMode {
 
         // 4) Handoff to the Depositor
         depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
-        Sleeper.sleep(300);
+        Sleeper.sleep(100);
         clawGrab.setPosition(CLAW_GRAB_OPEN);
 
 //        Make sure to set toggles properly so that servos retain position after sequence finishes
+        moveIntakeTo(0.2);
         dpadDownToggle.toggled = false;
         mechA.toggled = true;
-        
-        moveIntakeTo(0.2);
-        Sleeper.sleep(300);
+        mechB.toggled = false;
+        mechX.toggled = true;
+        clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+        Sleeper.sleep(150);
     }
 }
