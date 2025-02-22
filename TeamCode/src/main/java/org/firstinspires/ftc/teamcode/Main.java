@@ -142,6 +142,21 @@ public class Main extends OpMode {
     // For detecting a rising edge on gamepad2.a (to trigger the auto pickup routine only once per press)
     private boolean prevGamepad2A = false;
 
+    // Auto sequence state machine
+    private enum AutoState {
+        IDLE,
+        EXTEND_INTAKE,    // Step 1: Extend & orient intake
+        GRAB_PIECE,       // Step 2: Close claw on game piece
+        PREPARE_DEPOSIT,  // Step 3: Set deposit position & retract intake
+        BEGIN_HANDOFF,    // Step 4: Close deposit grabber
+        COMPLETE_HANDOFF, // Step 5: Open claw & update positions
+        DONE
+    }
+    
+    private AutoState autoState = AutoState.IDLE;
+    private boolean autoActive = false;
+    private long autoStartTime = 0;
+
     public boolean opModeIsActive() {
         return true;
     }
@@ -255,212 +270,278 @@ public class Main extends OpMode {
 
     @Override
     public void loop() {
-        double currentTime = getRuntime();
-        double deltaTime = currentTime - lastLoopTime;
-        lastLoopTime = currentTime;
-
-        // ------------------------------
-        // Update Odometry
-        // ------------------------------
-        odo.update();
-        Pose2D pose = odo.getPosition();
-        telemetry.addData("Pose", "{X: %.2f mm, Y: %.2f mm, H: %.2f°}",
-                pose.getX(DistanceUnit.MM), pose.getY(DistanceUnit.MM), pose.getHeading(AngleUnit.DEGREES));
-
-        // // ------------------------------
-        // // Update HuskyLens via the Wrapper
-        // // ------------------------------
-        // String data = huskyLensManager.getData();
-        // telemetry.addData("HuskyLens Data", data);
-
-        // TelemetryPacket packet = new TelemetryPacket();
-        // packet.put("HuskyLens Data", data);
-        // dashboard.sendTelemetryPacket(packet);
-
-        // ------------------------------
-        // Safety Mode (monitor battery)
-        // ------------------------------
-        VoltageSensor batterySensor = hardwareMap.voltageSensor.iterator().next();
-        double batteryVoltage = batterySensor.getVoltage();
-        boolean safetyMode = batteryVoltage < SAFE_VOLTAGE_THRESHOLD;
-        double safetyScaleFactor = safetyMode ? 0.6 : 1.0;
-
-        // ------------------------------
-        // Drive Controls with Tank Drive and Strafing
-        // ------------------------------
-        double leftPower = gamepad1.left_stick_y;
-        double rightPower = gamepad1.right_stick_y;
-        double strafePower = 0;
-
-        if (gamepad1.left_bumper) {
-            strafePower = 1;
-        } else if (gamepad1.right_bumper) {
-            strafePower = -1;
+        if (autoActive) {
+            runAutoSequence();
         }
+        
+        // Manual controls still work, but check if auto is running
+        if (!autoActive) {
+            double currentTime = getRuntime();
+            double deltaTime = currentTime - lastLoopTime;
+            lastLoopTime = currentTime;
 
-        frontLeft.setPower((leftPower + strafePower) * safetyScaleFactor);
-        backLeft.setPower((leftPower - strafePower) * safetyScaleFactor);
-        frontRight.setPower((rightPower - strafePower) * safetyScaleFactor);
-        backRight.setPower((rightPower + strafePower) * safetyScaleFactor);
+            // ------------------------------
+            // Update Odometry
+            // ------------------------------
+            odo.update();
+            Pose2D pose = odo.getPosition();
+            telemetry.addData("Pose", "{X: %.2f mm, Y: %.2f mm, H: %.2f°}",
+                    pose.getX(DistanceUnit.MM), pose.getY(DistanceUnit.MM), pose.getHeading(AngleUnit.DEGREES));
 
-        // ------------------------------
-        // Update Toggle States for Mechanisms (gamepad1)
-        // ------------------------------
-        mechA.update(gamepad1.a);
-        mechB.update(gamepad1.b);
-        mechX.update(gamepad1.x);
+            // ------------------------------
+            // Safety Mode (monitor battery)
+            // ------------------------------
+            VoltageSensor batterySensor = hardwareMap.voltageSensor.iterator().next();
+            double batteryVoltage = batterySensor.getVoltage();
+            boolean safetyMode = batteryVoltage < SAFE_VOLTAGE_THRESHOLD;
+            double safetyScaleFactor = safetyMode ? 0.6 : 1.0;
 
-        dpadUpToggle.update(gamepad1.dpad_up);
-        dpadLeftToggle.update(gamepad1.dpad_left);
-        dpadRightToggle.update(gamepad1.dpad_right);
+            // ------------------------------
+            // Drive Controls with Tank Drive and Strafing
+            // ------------------------------
+            double leftPower = gamepad1.left_stick_y;
+            double rightPower = gamepad1.right_stick_y;
+            double strafePower = 0;
 
-        // ------------------------------
-        // Process Y Button Reset (Requires a Hold)
-        // ------------------------------
-        boolean yReset = false;
-        if (gamepad1.y) {
-            if (yHoldStartTime == 0) {
-                yHoldStartTime = getRuntime();
-            } else if (getRuntime() - yHoldStartTime >= Y_RESET_HOLD_THRESHOLD) {
-                yReset = true;
+            if (gamepad1.left_bumper) {
+                strafePower = 1;
+            } else if (gamepad1.right_bumper) {
+                strafePower = -1;
             }
-        } else {
-            yHoldStartTime = 0;
-        }
 
-        // ------------------------------
-        // Main Claw Mechanism Actions
-        // ------------------------------
-        if (yReset) {
-            clawRotate.setPosition(CLAW_ORIENTATION_UP);
-            clawGrab.setPosition(CLAW_GRAB_OPEN);
-            clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
-            mechA.toggled = false;;
-            mechB.toggled = false;
-            mechX.toggled = false;
-        } else {
-            if (mechA.toggled) {
-                clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
+            frontLeft.setPower((leftPower + strafePower) * safetyScaleFactor);
+            backLeft.setPower((leftPower - strafePower) * safetyScaleFactor);
+            frontRight.setPower((rightPower - strafePower) * safetyScaleFactor);
+            backRight.setPower((rightPower + strafePower) * safetyScaleFactor);
+
+            // ------------------------------
+            // Update Toggle States for Mechanisms (gamepad1)
+            // ------------------------------
+            mechA.update(gamepad1.a);
+            mechB.update(gamepad1.b);
+            mechX.update(gamepad1.x);
+
+            dpadUpToggle.update(gamepad1.dpad_up);
+            dpadLeftToggle.update(gamepad1.dpad_left);
+            dpadRightToggle.update(gamepad1.dpad_right);
+
+            // ------------------------------
+            // Process Y Button Reset (Requires a Hold)
+            // ------------------------------
+            boolean yReset = false;
+            if (gamepad1.y) {
+                if (yHoldStartTime == 0) {
+                    yHoldStartTime = getRuntime();
+                } else if (getRuntime() - yHoldStartTime >= Y_RESET_HOLD_THRESHOLD) {
+                    yReset = true;
+                }
             } else {
+                yHoldStartTime = 0;
+            }
+
+            // ------------------------------
+            // Main Claw Mechanism Actions
+            // ------------------------------
+            if (yReset) {
                 clawRotate.setPosition(CLAW_ORIENTATION_UP);
-            }
-
-            if (mechX.toggled) {
                 clawGrab.setPosition(CLAW_GRAB_OPEN);
+                clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+                mechA.toggled = false;;
+                mechB.toggled = false;
+                mechX.toggled = false;
             } else {
-                clawGrab.setPosition(CLAW_GRAB_CLOSED);
-            }
-
-            double joystickX = gamepad2.right_stick_x;
-            final double DEADZONE = 0.05;
-
-            if (Math.abs(joystickX) > DEADZONE) {
-                claw_rolling = true;
-            } else if (gamepad1.b) {
-                claw_rolling = false;
-            }
-
-            if (!claw_rolling) {
-                if (mechB.toggled) {
-                    clawRoll.setPosition(CLAW_ROLL_ANGLE);
+                if (mechA.toggled) {
+                    clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
                 } else {
-                    clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+                    clawRotate.setPosition(CLAW_ORIENTATION_UP);
+                }
+
+                if (mechX.toggled) {
+                    clawGrab.setPosition(CLAW_GRAB_OPEN);
+                } else {
+                    clawGrab.setPosition(CLAW_GRAB_CLOSED);
+                }
+
+                double joystickX = gamepad2.right_stick_x;
+                final double DEADZONE = 0.05;
+
+                if (Math.abs(joystickX) > DEADZONE) {
+                    claw_rolling = true;
+                } else if (gamepad1.b) {
+                    claw_rolling = false;
+                }
+
+                if (!claw_rolling) {
+                    if (mechB.toggled) {
+                        clawRoll.setPosition(CLAW_ROLL_ANGLE);
+                    } else {
+                        clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+                    }
                 }
             }
+            // ------------------------------
+            // Intake Extender Control (Right Trigger on Gamepad1)
+            // ------------------------------
+            double rawRt = gamepad1.right_trigger;
+            double triggerDeadzone = 0.05;
+            double filteredRT = Math.abs(rawRt) < triggerDeadzone ? 0 : rawRt;
+
+            double targetExtenderPosition = scaleExtenderInput(filteredRT);
+            intakeExtenderPosition = rampServoValue(targetExtenderPosition, lastIntakeCommandedPosition, deltaTime);
+            lastIntakeCommandedPosition = intakeExtenderPosition;
+
+            intakeExtend1.setPosition(intakeExtenderPosition);
+            intakeExtend2.setPosition(intakeExtenderPosition);
+
+            // ------------------------------
+            // Depositor Mechanism Controls (Now on gamepad2)
+            // ------------------------------
+            dpadDownToggle.update(gamepad2.dpad_down);
+
+            if (gamepad2.dpad_up) {
+                deposit_position = "reset";
+            } else if (gamepad2.dpad_left) {
+                deposit_position = "wall";
+            } else if (gamepad2.dpad_right) {
+                deposit_position = "aligned";
+            }
+
+            if (Objects.equals(deposit_position, "aligned")) {
+                depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
+            } else if (Objects.equals(deposit_position, "wall")) {
+                depositRotate.setPosition(DEPOSIT_ORIENTATION_WALL);
+            } else if (Objects.equals(deposit_position, "reset")) {
+                depositRotate.setPosition(DEPOSIT_ORIENTATION_RESET);
+            }
+
+            if (dpadDownToggle.toggled) {
+                depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
+            } else {
+                depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
+            }
+
+            // ------------------------------
+            // Lift Control (Now on gamepad2 - Right stick Y for up/down)
+            // ------------------------------
+            double rawLiftSpeed = 0;
+            double liftStickY = -gamepad2.right_stick_y;
+
+            if (Math.abs(liftStickY) > 0.05) {
+                rawLiftSpeed = liftStickY;
+            }
+
+            if (Math.abs(rawLiftSpeed) > 0.05) {
+                liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                liftMotor.setPower(rawLiftSpeed);
+            } else {
+                liftMotor.setPower(0);
+            }
+
+            // ------------------------------
+            // Telemetry for Driver Feedback
+            // ------------------------------
+            telemetry.addData("Battery Voltage", "%.2f V", batteryVoltage);
+            telemetry.addData("Safety Mode", safetyMode);
+            telemetry.addData("Left Power", "%.2f", leftPower);
+            telemetry.addData("Right Power", "%.2f", rightPower);
+            telemetry.addData("Raw RT", "%.2f", rawRt);
+            telemetry.addData("Target Extender Pos", "%.2f", targetExtenderPosition);
+            telemetry.addData("Commanded Extender Pos", "%.2f", intakeExtenderPosition);
+            telemetry.addData("Delta Time", "%.2f", deltaTime);
+            telemetry.addData("Claw Orientation (A)", mechA.toggled);
+            telemetry.addData("Claw Grab (B)", mechB.toggled);
+            telemetry.addData("Claw Roll (X)", mechX.toggled);
+            telemetry.addData("Y Reset Held", yReset);
+            telemetry.addData("Deposit Orientation (DPad Up)", dpadUpToggle.toggled);
+            telemetry.addData("Deposit Grab (DPad Down)", dpadDownToggle.toggled);
+            telemetry.update();
         }
-        // ------------------------------
-        // Intake Extender Control (Right Trigger on Gamepad1)
-        // ------------------------------
-        double rawRt = gamepad1.right_trigger;
-        double triggerDeadzone = 0.05;
-        double filteredRT = Math.abs(rawRt) < triggerDeadzone ? 0 : rawRt;
-
-        double targetExtenderPosition = scaleExtenderInput(filteredRT);
-        intakeExtenderPosition = rampServoValue(targetExtenderPosition, lastIntakeCommandedPosition, deltaTime);
-        lastIntakeCommandedPosition = intakeExtenderPosition;
-
-        intakeExtend1.setPosition(intakeExtenderPosition);
-        intakeExtend2.setPosition(intakeExtenderPosition);
-
-        // ------------------------------
-        // Depositor Mechanism Controls (Now on gamepad2)
-        // ------------------------------
-        dpadDownToggle.update(gamepad2.dpad_down);
-
-        if (gamepad2.dpad_up) {
-            deposit_position = "reset";
-        } else if (gamepad2.dpad_left) {
-            deposit_position = "wall";
-        } else if (gamepad2.dpad_right) {
-            deposit_position = "aligned";
-        }
-
-        if (Objects.equals(deposit_position, "aligned")) {
-            depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
-        } else if (Objects.equals(deposit_position, "wall")) {
-            depositRotate.setPosition(DEPOSIT_ORIENTATION_WALL);
-        } else if (Objects.equals(deposit_position, "reset")) {
-            depositRotate.setPosition(DEPOSIT_ORIENTATION_RESET);
-        }
-
-        if (dpadDownToggle.toggled) {
-            depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
-        } else {
-            depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
-        }
-
-//        // Manual claw roll control using gamepad2 left stick X
-//        final double ROLL_ADJUSTMENT_SPEED = 0.002;
-//        double leftStickX = gamepad2.left_stick_x;
-//        if (Math.abs(leftStickX) > 0.05) {
-//            double currentPos = clawRoll.getPosition();
-//            clawRoll.setPosition(Math.min(1, Math.max(0, currentPos + (leftStickX * ROLL_ADJUSTMENT_SPEED))));
-//            claw_rolling = true;
-//        }
-
-        // ------------------------------
-        // Lift Control (Now on gamepad2 - Right stick Y for up/down)
-        // ------------------------------
-        double rawLiftSpeed = 0;
-        double liftStickY = -gamepad2.right_stick_y;
-
-        if (Math.abs(liftStickY) > 0.05) {
-            rawLiftSpeed = liftStickY;
-        }
-
-        if (Math.abs(rawLiftSpeed) > 0.05) {
-            liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-            liftMotor.setPower(rawLiftSpeed);
-        } else {
-            liftMotor.setPower(0);
-        }
-
-        // ------------------------------
-        // Auto-Grab (A on gamepad2)
-        // ------------------------------
-        if (gamepad2.a && !prevGamepad2A) {
-            autoIntakeAndDepositPiece();
+        
+        // Check for auto sequence trigger (gamepad2 'a' button)
+        if (gamepad2.a && !prevGamepad2A && !autoActive) {
+            startAutoSequence();
         }
         prevGamepad2A = gamepad2.a;
-
-        // ------------------------------
-        // Telemetry for Driver Feedback
-        // ------------------------------
-        telemetry.addData("Battery Voltage", "%.2f V", batteryVoltage);
-        telemetry.addData("Safety Mode", safetyMode);
-        telemetry.addData("Left Power", "%.2f", leftPower);
-        telemetry.addData("Right Power", "%.2f", rightPower);
-        telemetry.addData("Raw RT", "%.2f", rawRt);
-        telemetry.addData("Target Extender Pos", "%.2f", targetExtenderPosition);
-        telemetry.addData("Commanded Extender Pos", "%.2f", intakeExtenderPosition);
-        telemetry.addData("Delta Time", "%.2f", deltaTime);
-        telemetry.addData("Claw Orientation (A)", mechA.toggled);
-        telemetry.addData("Claw Grab (B)", mechB.toggled);
-        telemetry.addData("Claw Roll (X)", mechX.toggled);
-        telemetry.addData("Y Reset Held", yReset);
-        telemetry.addData("Deposit Orientation (DPad Up)", dpadUpToggle.toggled);
-        telemetry.addData("Deposit Grab (DPad Down)", dpadDownToggle.toggled);
+        
+        // Update telemetry
+        telemetry.addData("Auto State", autoState);
+        telemetry.addData("Auto Active", autoActive);
         telemetry.update();
+    }
+
+    private void startAutoSequence() {
+        autoActive = true;
+        autoState = AutoState.EXTEND_INTAKE;
+        autoStartTime = System.currentTimeMillis();
+        telemetry.addData("Auto-Grab", "Starting sequence...");
+        telemetry.update();
+    }
+    
+    private void runAutoSequence() {
+        long elapsedTime = System.currentTimeMillis() - autoStartTime;
+        
+        switch (autoState) {
+            case EXTEND_INTAKE:
+                // Step 1: Extend & Orient Intake
+                moveIntakeTo(0.2);
+                depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
+                clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
+                clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+                if (elapsedTime >= 500) {
+                    autoState = AutoState.GRAB_PIECE;
+                    autoStartTime = System.currentTimeMillis();
+                }
+                break;
+                
+            case GRAB_PIECE:
+                // Step 2: Grab the Game Piece
+                clawGrab.setPosition(CLAW_GRAB_CLOSED);
+                if (elapsedTime >= 300) {
+                    autoState = AutoState.PREPARE_DEPOSIT;
+                    autoStartTime = System.currentTimeMillis();
+                }
+                break;
+                
+            case PREPARE_DEPOSIT:
+                // Step 3: Prepare for deposit
+                depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
+                moveIntakeTo(0);
+                if (elapsedTime >= 700) {
+                    autoState = AutoState.BEGIN_HANDOFF;
+                    autoStartTime = System.currentTimeMillis();
+                }
+                break;
+                
+            case BEGIN_HANDOFF:
+                // Step 4: Begin handoff
+                depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
+                if (elapsedTime >= 300) {
+                    autoState = AutoState.COMPLETE_HANDOFF;
+                    autoStartTime = System.currentTimeMillis();
+                }
+                break;
+                
+            case COMPLETE_HANDOFF:
+                // Step 5: Complete handoff
+                clawGrab.setPosition(CLAW_GRAB_OPEN);
+                // Update toggles to maintain positions
+                dpadDownToggle.toggled = false;
+                mechA.toggled = true;
+                moveIntakeTo(0.2);
+                if (elapsedTime >= 300) {
+                    autoState = AutoState.DONE;
+                }
+                break;
+                
+            case DONE:
+                // Sequence complete
+                autoActive = false;
+                autoState = AutoState.IDLE;
+                break;
+                
+            default:
+                break;
+        }
     }
 
     /**
@@ -502,51 +583,5 @@ public class Main extends OpMode {
     }
 
     public void sleep() {
-    }
-
-    /**
-     * Performs the auto routine for picking up and depositing a game piece.
-     * It uses encoder-controlled lift movement and resets the lift using the TouchSensor.
-     */
-    public void autoIntakeAndDepositPiece() {
-        telemetry.addData("Auto-Grab", "Target detected! Starting routine.");
-        telemetry.update();
-
-        // 0) Set Motor powers to zero
-            frontLeft.setPower(0);
-            backLeft.setPower(0);
-            frontRight.setPower(0);
-            backRight.setPower(0);
-
-        // 1) Extend & Orient Intake for Pickup
-        moveIntakeTo(0.2);
-        depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
-        clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
-        clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
-        Sleeper.sleep(150);
-
-        // 2) Grab the Game Piece
-        clawGrab.setPosition(CLAW_GRAB_CLOSED);
-        telemetry.addData("Auto-Grab", "Claw closed around piece");
-        telemetry.update();
-        Sleeper.sleep(100);
-
-        depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
-        moveIntakeTo(0);
-        Sleeper.sleep(700);
-
-        // 4) Handoff to the Depositor
-        depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
-        Sleeper.sleep(225);
-        clawGrab.setPosition(CLAW_GRAB_OPEN);
-
-//        Make sure to set toggles properly so that servos retain position after sequence finishes
-        moveIntakeTo(0.2);
-        dpadDownToggle.toggled = false;
-        mechA.toggled = true;
-        mechB.toggled = false;
-        mechX.toggled = true;
-        clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
-        Sleeper.sleep(150);
     }
 }
