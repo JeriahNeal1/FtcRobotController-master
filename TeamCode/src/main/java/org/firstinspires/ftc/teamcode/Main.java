@@ -13,6 +13,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 
+import java.util.List;
 import java.util.Objects;
 
 // Import the HuskyLensManager wrapper
@@ -510,6 +511,12 @@ public class Main extends OpMode {
     public void autoIntakeAndDepositPiece() {
         telemetry.addData("Auto-Grab", "Target detected! Starting routine.");
         telemetry.update();
+
+        // 0) Set Motor powers to zero
+            frontLeft.setPower(0);
+            backLeft.setPower(0);
+            frontRight.setPower(0);
+            backRight.setPower(0);
 
         // 1) Extend & Orient Intake for Pickup
         moveIntakeTo(0.2);

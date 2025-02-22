@@ -21,6 +21,9 @@ public abstract class AutonomousBase extends LinearOpMode {
     private final double TICKS_PER_REV = 537.7;  // For GoBilda 5202 series
     private final double WHEEL_DIAMETER_MM = 96.0;
     private final double TICKS_PER_MM = TICKS_PER_REV / (WHEEL_DIAMETER_MM * Math.PI);
+
+    double leftPower, rightPower = 1.0;
+    double strafePower = 1;
     
     protected void initializeHardware() {
         // Initialize drive motors
@@ -48,11 +51,11 @@ public abstract class AutonomousBase extends LinearOpMode {
         liftSensor = hardwareMap.get(TouchSensor.class, "lift_touch_sensor");
         
         // Configure motors for position control
-        setMotorRunMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        setMotorRunMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        liftMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         
         // Set zero power behavior
-        setMotorZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        liftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
     }
     
     protected void resetLift() {
@@ -100,6 +103,32 @@ public abstract class AutonomousBase extends LinearOpMode {
         // Reset lift
         resetLift();
     }
+
+        protected void moveRobotForward(int millimeters) {
+
+        }
+
+        protected void moveRobotBack(int millimeters) {
+            
+        }
+
+        protected void moveRobotRight(int millimeters) {
+            strafePower = -1;
+    
+            frontLeft.setPower(leftPower + strafePower);
+            backLeft.setPower(leftPower - strafePower);
+            frontRight.setPower(rightPower - strafePower);
+            backRight.setPower(rightPower + strafePower);
+        }
+
+        protected void moveRobotLeft(int millimeters) {
+            strafePower = 1;
+    
+            frontLeft.setPower(leftPower + strafePower);
+            backLeft.setPower(leftPower - strafePower);
+            frontRight.setPower(rightPower - strafePower);
+            backRight.setPower(rightPower + strafePower);
+        }
 
     // More movement functions in next message...
 } 
