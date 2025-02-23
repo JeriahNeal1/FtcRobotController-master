@@ -45,10 +45,12 @@ public class AutonomousHandoff extends AutonomousBase {
     final double DEPOSIT_GRAB_OPEN           = 0.03;  // Depositor claw open (release piece)
 
     // Movement constants
-    private static final double TARGET_DISTANCE_MM = -152.4; // Negative for backward movement
+    private static final double STRAFE_DISTANCE_MM = 200.0;  // Positive for left strafe
+    private static final double BACKWARD_DISTANCE_MM = -152.4; // Negative for backward
     private static final double POSITION_TOLERANCE_MM = 5.0;
     private static final double MOVEMENT_POWER = 0.3;
-    private static final int LIFT_HEIGHT = 14; // Encoder ticks for lift height
+    private static final double STRAFE_POWER = 0.4;  // Slightly higher power for strafing
+    private static final int LIFT_HEIGHT = 1200;
     
     // Odometry computer
     private GoBildaPinpointDriver odo;
@@ -109,8 +111,13 @@ public class AutonomousHandoff extends AutonomousBase {
             waitForStart();
             
             if (opModeIsActive()) {
-                // 1. Move backwards with precise odometry control
-                moveBackwardWithOdometry(TARGET_DISTANCE_MM);
+                // 1. Strafe left to align with bar
+                moveWithOdometry(STRAFE_DISTANCE_MM, Movement.STRAFE);
+                sleep(200); // Small pause to ensure stability
+                
+                // 2. Move backwards to approach bar
+                moveWithOdometry(BACKWARD_DISTANCE_MM, Movement.STRAIGHT);
+                sleep(200);
                 
                 // 2. Handoff sequence
                 performHandoff();
@@ -148,25 +155,35 @@ public class AutonomousHandoff extends AutonomousBase {
         resetLift();
     }
 
-    private void moveBackwardWithOdometry(double targetDistanceMM) {
+    // Enum to specify movement type
+    private enum Movement {
+        STRAIGHT,
+        STRAFE
+    }
+    
+    private void moveWithOdometry(double targetDistanceMM, Movement moveType) {
         ElapsedTime timeout = new ElapsedTime();
         timeout.reset();
         
         // Get initial position
         odo.update();
         Pose2D initialPose = odo.getPosition();
-        double startX = initialPose.getX(DistanceUnit.MM);
+        double startPos = (moveType == Movement.STRAIGHT) ? 
+                         initialPose.getX(DistanceUnit.MM) : 
+                         initialPose.getY(DistanceUnit.MM);
         
         while (opModeIsActive() && timeout.seconds() < 3.0) {
             odo.update();
             Pose2D currentPose = odo.getPosition();
-            double currentX = currentPose.getX(DistanceUnit.MM);
-            double distanceMoved = currentX - startX;
+            double currentPos = (moveType == Movement.STRAIGHT) ? 
+                              currentPose.getX(DistanceUnit.MM) : 
+                              currentPose.getY(DistanceUnit.MM);
+            double distanceMoved = currentPos - startPos;
             
             // Calculate error and adjust power
             double error = targetDistanceMM - distanceMoved;
-            double power = -Math.min(MOVEMENT_POWER, 
-                                   Math.abs(error / 50.0)) * Math.signum(error);
+            double basePower = (moveType == Movement.STRAIGHT) ? MOVEMENT_POWER : STRAFE_POWER;
+            double power = Math.min(basePower, Math.abs(error / 50.0)) * Math.signum(error);
             
             // Check if we've reached target
             if (Math.abs(error) < POSITION_TOLERANCE_MM) {
@@ -174,10 +191,16 @@ public class AutonomousHandoff extends AutonomousBase {
                 break;
             }
             
-            // Apply power to motors
-            setDrivePowers(power);
+            // Apply powers based on movement type
+            if (moveType == Movement.STRAIGHT) {
+                setDrivePowers(power, power, power, power);
+            } else {  // STRAFE
+                // For mecanum wheels, opposite corners move in same direction
+                setDrivePowers(power, -power, -power, power);
+            }
             
             // Update telemetry
+            telemetry.addData("Movement Type", moveType);
             telemetry.addData("Target Distance", targetDistanceMM);
             telemetry.addData("Current Distance", distanceMoved);
             telemetry.addData("Error", error);
@@ -188,14 +211,14 @@ public class AutonomousHandoff extends AutonomousBase {
         stopRobot();
     }
     
-    private void setDrivePowers(double power) {
-        frontLeft.setPower(power);
-        frontRight.setPower(power);
-        backLeft.setPower(power);
-        backRight.setPower(power);
+    private void setDrivePowers(double fl, double fr, double bl, double br) {
+        frontLeft.setPower(fl);
+        frontRight.setPower(fr);
+        backLeft.setPower(bl);
+        backRight.setPower(br);
     }
     
     private void stopRobot() {
-        setDrivePowers(0);
+        setDrivePowers(0, 0, 0, 0);
     }
 } 
