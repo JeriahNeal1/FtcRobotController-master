@@ -34,15 +34,15 @@ public class AutonomousHandoff extends AutonomousBase {
     // Additional servo positions needed for this routine
     final double CLAW_ORIENTATION_UP = 0.90;
     final double CLAW_ORIENTATION_DOWN = 0.0;
-    final double CLAW_GRAB_CLOSED = 0.0;
-    final double CLAW_GRAB_OPEN = 0.3;
+    final double CLAW_GRAB_CLOSED = 0.3;
+    final double CLAW_GRAB_OPEN = 0.0;
     final double CLAW_ROLL_NEUTRAL = 0.35;
 
     final double DEPOSIT_ORIENTATION_ALIGNED = 0.98;
     final double DEPOSIT_ORIENTATION_WALL = 0.25;
     final double DEPOSIT_ORIENTATION_RESET   = 0.4;
-    final double DEPOSIT_GRAB_CLOSED         = 0.0;  // Depositor claw closed (capture piece)
-    final double DEPOSIT_GRAB_OPEN           = 0.2;  // Depositor claw open (release piece)
+    final double DEPOSIT_GRAB_CLOSED         = 0.30;  // Depositor claw closed (capture piece)
+    final double DEPOSIT_GRAB_OPEN           = 0.03;  // Depositor claw open (release piece)
 
     // Movement constants
     private static final double TARGET_DISTANCE_MM = -152.4; // Negative for backward movement
@@ -142,6 +142,9 @@ public class AutonomousHandoff extends AutonomousBase {
         depositRotate.setPosition(DEPOSIT_ORIENTATION_WALL);
         liftMotor.setPower(1.0);
         Sleeper.sleep(600);
+        liftMotor.setPower(1);
+        Sleeper.sleep(500);
+        liftMotor.setPower(0);
         resetLift();
     }
 
