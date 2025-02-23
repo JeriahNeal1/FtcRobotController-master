@@ -93,6 +93,7 @@ public class Main extends OpMode {
     final double CLAW_GRAB_OPEN        = 0.0;     // Claw grabber open.
     final double CLAW_ROLL_ANGLE       = 0;       // Claw roll for pickup angle.
     final double CLAW_ROLL_NEUTRAL     = 0.35;    // Neutral claw roll.
+    final double CLAW_ROLL_FLIP        = 1;     // Flip for specimen transfer
 
     // Intake Extender presets (scissor mechanism):
     final double INTAKE_EXTENDER_HALF = 0.25;   // 50% extension.
@@ -141,6 +142,8 @@ public class Main extends OpMode {
 
     // For detecting a rising edge on gamepad2.a (to trigger the auto pickup routine only once per press)
     private boolean prevGamepad2A = false;
+    // For detecting a rising edge on gamepad2.y (to trigger the auto flip routine only once per press)
+    private boolean prevGamepad2Y = false;
 
     public boolean opModeIsActive() {
         return true;
@@ -335,7 +338,8 @@ public class Main extends OpMode {
             clawRotate.setPosition(CLAW_ORIENTATION_UP);
             clawGrab.setPosition(CLAW_GRAB_OPEN);
             clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
-            mechA.toggled = false;;
+            mechA.toggled = false;
+            ;
             mechB.toggled = false;
             mechX.toggled = false;
         } else {
@@ -443,6 +447,10 @@ public class Main extends OpMode {
         }
         prevGamepad2A = gamepad2.a;
 
+        if (gamepad2.y && !prevGamepad2Y) {
+            autoIntakeAndDepositSpecimen();
+        }
+        prevGamepad2Y = gamepad2.y;
         // ------------------------------
         // Telemetry for Driver Feedback
         // ------------------------------
@@ -546,4 +554,48 @@ public class Main extends OpMode {
         clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
         Sleeper.sleep(150);
     }
+public void autoIntakeAndDepositSpecimen() {
+    telemetry.addData("Auto-Bar", "Target detected! Starting routine.");
+    telemetry.update();
+
+    // 0) Set Motor powers to zero to ensure robot does not drift from original position
+    frontLeft.setPower(0);
+    backLeft.setPower(0);
+    frontRight.setPower(0);
+    backRight.setPower(0);
+
+    // 1) Extend & Orient Intake for Pickup
+    moveIntakeTo(0.28);
+    depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
+    clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
+    clawRoll.setPosition(CLAW_ROLL_FLIP);
+    Sleeper.sleep(175);
+
+    // 2) Grab the Game Piece
+    clawGrab.setPosition(CLAW_GRAB_CLOSED);
+    telemetry.addData("Auto-Grab", "Claw closed around piece");
+    telemetry.update();
+    Sleeper.sleep(200);
+
+    depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
+    moveIntakeTo(0);
+    Sleeper.sleep(700);
+
+    // 4) Handoff to the Depositor
+    depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
+    Sleeper.sleep(225);
+    clawGrab.setPosition(CLAW_GRAB_OPEN);
+
+//        Make sure to set toggles properly so that servos retain position after sequence finishes
+    moveIntakeTo(0.25);
+    dpadDownToggle.toggled = false;
+    mechA.toggled = true;
+    mechB.toggled = false;
+    mechX.toggled = true;
+    Sleeper.sleep(100);
+
+    // Offsetting claw rotation time to allow outtake arm to escape
+    clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
+    Sleeper.sleep(50);
+}
 }
