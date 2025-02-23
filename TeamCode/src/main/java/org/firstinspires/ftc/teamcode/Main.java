@@ -530,29 +530,22 @@ public class Main extends OpMode {
         clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
         Sleeper.sleep(150);
 
-        // 2) Grab the Game Piece
-        clawGrab.setPosition(CLAW_GRAB_CLOSED);
-        telemetry.addData("Auto-Grab", "Claw closed around piece");
-        telemetry.update();
-        Sleeper.sleep(100);
-
         depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
         moveIntakeTo(0);
-        Sleeper.sleep(700);
+        Sleeper.sleep(525);
 
         // 4) Handoff to the Depositor
         depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
         Sleeper.sleep(225);
         clawGrab.setPosition(CLAW_GRAB_OPEN);
-
-//        Make sure to set toggles properly so that servos retain position after sequence finishes
         moveIntakeTo(0.2);
+        Sleeper.sleep(200);
+//        Make sure to set toggles properly so that servos retain position after sequence finishes
         dpadDownToggle.toggled = false;
         mechA.toggled = true;
         mechB.toggled = false;
         mechX.toggled = true;
         clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
-        Sleeper.sleep(150);
     }
 public void autoIntakeAndDepositSpecimen() {
     telemetry.addData("Auto-Bar", "Target detected! Starting routine.");
@@ -565,25 +558,20 @@ public void autoIntakeAndDepositSpecimen() {
     backRight.setPower(0);
 
     // 1) Extend & Orient Intake for Pickup
-    moveIntakeTo(0.28);
+
     depositGrab.setPosition(DEPOSIT_GRAB_OPEN);
     clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
     clawRoll.setPosition(CLAW_ROLL_FLIP);
-    Sleeper.sleep(175);
-
-    // 2) Grab the Game Piece
-    clawGrab.setPosition(CLAW_GRAB_CLOSED);
-    telemetry.addData("Auto-Grab", "Claw closed around piece");
-    telemetry.update();
-    Sleeper.sleep(200);
-
     depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
+    moveIntakeTo(0.28);
+    Sleeper.sleep(400);
+
     moveIntakeTo(0);
-    Sleeper.sleep(700);
+    Sleeper.sleep(300);
 
     // 4) Handoff to the Depositor
     depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
-    Sleeper.sleep(225);
+    Sleeper.sleep(200);
     clawGrab.setPosition(CLAW_GRAB_OPEN);
 
 //        Make sure to set toggles properly so that servos retain position after sequence finishes
@@ -592,10 +580,9 @@ public void autoIntakeAndDepositSpecimen() {
     mechA.toggled = true;
     mechB.toggled = false;
     mechX.toggled = true;
-    Sleeper.sleep(100);
+Sleeper.sleep(100);
 
     // Offsetting claw rotation time to allow outtake arm to escape
     clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
-    Sleeper.sleep(50);
 }
 }
