@@ -59,29 +59,35 @@ public abstract class AutonomousBase extends LinearOpMode {
     }
     
     protected void resetLift() {
-        liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        liftMotor.setPower(-0.5);
-        
-        ElapsedTime timeout = new ElapsedTime();
-        timeout.reset();
-        
-        while (!liftSensor.isPressed() && timeout.seconds() < 5.0 && opModeIsActive()) {
-            telemetry.addData("Status", "Resetting lift...");
-            telemetry.update();
+        telemetry.addData("Touch Sensor", liftSensor.isPressed() ? "Pressed" : "Not Pressed");
+        if (!liftSensor.isPressed()) {
+            while (liftSensor.isPressed()) {
+                liftMotor.setPower(-0.5);
+                telemetry.addData("Lift Status", liftSensor.isPressed());
+                telemetry.update();
+            }
+            liftMotor.setPower(0);
+        } else {
+            liftMotor.setPower(0);
         }
-        
-        liftMotor.setPower(0);
-        liftMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
     }
     
     protected void moveLift(int targetPosition, double power) {
-        liftMotor.setTargetPosition(targetPosition);
-        liftMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        liftMotor.setPower(power);
+        // Predict Position based on time
+        // Calculate estimated time needed based on distance and power
+        double estimatedTime = Math.abs(targetPosition) / (power * 800); // 800 is approximate ticks per second at full power
         
-        while (liftMotor.isBusy() && opModeIsActive()) {
-            telemetry.addData("Lift Position", liftMotor.getCurrentPosition());
+        // Set power in appropriate direction
+        double directedPower = targetPosition > 0 ? power : -power;
+        liftMotor.setPower(directedPower);
+        
+        ElapsedTime timer = new ElapsedTime();
+        timer.reset();
+        
+        // Run for calculated duration
+        while (timer.seconds() < estimatedTime && opModeIsActive()) {
+            telemetry.addData("Lift Status", "Moving...");
+            telemetry.addData("Time Remaining", "%.2f", estimatedTime - timer.seconds());
             telemetry.update();
         }
         

@@ -53,17 +53,17 @@ public class Main extends OpMode {
     // ------------------------------
     // Hardware Declarations (Drive, Lift & Mechanisms)
     // ------------------------------
-    DcMotor frontLeft, frontRight, backLeft, backRight;
-    DcMotor liftMotor;
+    public DcMotor frontLeft, frontRight, backLeft, backRight;
+    public DcMotor liftMotor;
 
     // Mechanism Servos (gamepad1)
-    Servo clawRotate;      // Claw orientation servo (rotate to face ground/up)
-    Servo clawGrab;        // Claw grabber servo (open/close)
-    Servo clawRoll;        // Claw roll servo (adjust pickup angle)
-    Servo depositRotate;   // Depositor claw orientation servo
-    Servo depositGrab;     // Depositor claw grabber servo
-    Servo intakeExtend1;   // Intake extender servo 1 (scissor mechanism)
-    Servo intakeExtend2;   // Intake extender servo 2 (mirrors servo 1)
+    public Servo clawRotate;      // Claw orientation servo (rotate to face ground/up)
+    public Servo clawGrab;        // Claw grabber servo (open/close)
+    public Servo clawRoll;        // Claw roll servo (adjust pickup angle)
+    public Servo depositRotate;   // Depositor claw orientation servo
+    public Servo depositGrab;     // Depositor claw grabber servo
+    public Servo intakeExtend1;   // Intake extender servo 1 (scissor mechanism)
+    public Servo intakeExtend2;   // Intake extender servo 2 (mirrors servo 1)
 
     // ------------------------------
     // HuskyLens Manager (Wrapper for the GoBilda HuskyLens)
