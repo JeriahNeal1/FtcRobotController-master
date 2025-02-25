@@ -45,81 +45,74 @@ public class AutonomousHandoff extends AutonomousBase {
     final double DEPOSIT_GRAB_OPEN           = 0.03;  // Depositor claw open (release piece)
 
     // Movement constants
-    private static final double STRAFE_DISTANCE_MM = 200.0;  // Positive for left strafe
-    private static final double BACKWARD_DISTANCE_MM = -152.4; // Negative for backward
-    private static final double POSITION_TOLERANCE_MM = 5.0;
-    private static final double MOVEMENT_POWER = 0.3;
-    private static final double STRAFE_POWER = 0.4;  // Slightly higher power for strafing
+    private static final double DRIVE_POWER = 0.3;
+    private static final double STRAFE_POWER = 0.4;
     private static final int LIFT_HEIGHT = 1200;
     
-    // Odometry computer
-    private GoBildaPinpointDriver odo;
-
     @Override
     public void runOpMode() {
         try {
-            // Initialize robot hardware using parent class method
+            telemetry.addData("Status", "Initializing...");
+            telemetry.update();
+            
+            // Initialize robot hardware
             initializeHardware();
+
+            
+
             // ------------------------------
-        // Initialize Drive and Lift Motors (Gamepad1 & gamepad1)
-        // ------------------------------
-        frontLeft  = hardwareMap.get(DcMotor.class, "front_left");
-        frontRight = hardwareMap.get(DcMotor.class, "front_right");
-        backLeft   = hardwareMap.get(DcMotor.class, "back_left");
-        backRight  = hardwareMap.get(DcMotor.class, "back_right");
-        liftMotor  = hardwareMap.get(DcMotor.class, "lift_motor");
+            // Initialize Drive and Lift Motors (Gamepad1 & gamepad1)
+            // ------------------------------
+            frontLeft  = hardwareMap.get(DcMotor.class, "front_left");
+            frontRight = hardwareMap.get(DcMotor.class, "front_right");
+            backLeft   = hardwareMap.get(DcMotor.class, "back_left");
+            backRight  = hardwareMap.get(DcMotor.class, "back_right");
+            liftMotor  = hardwareMap.get(DcMotor.class, "lift_motor");
 
 
-        frontLeft.setDirection(DcMotor.Direction.FORWARD);
-        backLeft.setDirection(DcMotor.Direction.FORWARD);
-        frontRight.setDirection(DcMotor.Direction.FORWARD);
-        backRight.setDirection(DcMotor.Direction.REVERSE);
-        liftMotor.setDirection(DcMotor.Direction.REVERSE);
+            frontLeft.setDirection(DcMotor.Direction.FORWARD);
+            backLeft.setDirection(DcMotor.Direction.FORWARD);
+            frontRight.setDirection(DcMotor.Direction.FORWARD);
+            backRight.setDirection(DcMotor.Direction.REVERSE);
+            liftMotor.setDirection(DcMotor.Direction.REVERSE);
 
-        liftMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        liftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            liftMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+            liftMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            liftMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-        // ------------------------------
-        // Initialize Mechanism Servos (gamepad1)
-        // ------------------------------
-        clawRotate    = hardwareMap.get(Servo.class, "claw_rotate");
-        clawGrab      = hardwareMap.get(Servo.class, "claw_grab");
-        clawRoll      = hardwareMap.get(Servo.class, "claw_roll");
-        depositRotate = hardwareMap.get(Servo.class, "deposit_rotate");
-        depositGrab   = hardwareMap.get(Servo.class, "deposit_grab");
+            // ------------------------------
+            // Initialize Mechanism Servos (gamepad1)
+            // ------------------------------
+            clawRotate    = hardwareMap.get(Servo.class, "claw_rotate");
+            clawGrab      = hardwareMap.get(Servo.class, "claw_grab");
+            clawRoll      = hardwareMap.get(Servo.class, "claw_roll");
+            depositRotate = hardwareMap.get(Servo.class, "deposit_rotate");
+            depositGrab   = hardwareMap.get(Servo.class, "deposit_grab");
+            clawRoll.setDirection(Servo.Direction.FORWARD);
 
-        clawRoll.setDirection(Servo.Direction.FORWARD);
-            
-            // Initialize and configure odometry
-            odo = hardwareMap.get(GoBildaPinpointDriver.class, "odo");
-            odo.setOffsets(-84.0, -168.0);
-            odo.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
-            odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD, 
-                                   GoBildaPinpointDriver.EncoderDirection.FORWARD);
-            
-            // Reset odometry and IMU
-            odo.resetPosAndIMU();
-            
-            // Ensure servos are in starting positions
+            // Initialize starting positions
             initializeServoPositions();
             
-            telemetry.addData("Status", "Initialized");
-            telemetry.addData("Odometry Status", odo.getDeviceStatus());
+            telemetry.addData("Status", "Initialization Complete");
+            telemetry.addData("Touch Sensor", liftSensor.isPressed() ? "Pressed" : "Not Pressed");
             telemetry.update();
             
             waitForStart();
             
             if (opModeIsActive()) {
                 // 1. Strafe left to align with bar
-                moveWithOdometry(STRAFE_DISTANCE_MM, Movement.STRAFE);
-                sleep(200); // Small pause to ensure stability
+                telemetry.addData("Status", "Strafing Left");
+                telemetry.update();
+                strafeLeft(2000); // Time in milliseconds
                 
                 // 2. Move backwards to approach bar
-                moveWithOdometry(BACKWARD_DISTANCE_MM, Movement.STRAIGHT);
-                sleep(200);
+                telemetry.addData("Status", "Moving Backward");
+                telemetry.update();
+                moveBackward(1250); // Time in milliseconds
                 
-                // 2. Handoff sequence
+                // 3. Perform handoff sequence
+                telemetry.addData("Status", "Performing Handoff");
+                telemetry.update();
                 performHandoff();
                 
                 telemetry.addData("Status", "Autonomous Complete");
@@ -129,96 +122,53 @@ public class AutonomousHandoff extends AutonomousBase {
             telemetry.addData("Error", "Exception: " + e.getMessage());
             telemetry.update();
         } finally {
-            // Ensure motors are stopped
             stopRobot();
         }
     }
     
     private void initializeServoPositions() {
-        // Set initial positions
-        clawGrab.setPosition(CLAW_GRAB_OPEN);
-        clawRotate.setPosition(CLAW_ORIENTATION_DOWN);
+        clawGrab.setPosition(CLAW_GRAB_CLOSED);
+        clawRotate.setPosition(CLAW_ORIENTATION_UP);
         clawRoll.setPosition(CLAW_ROLL_NEUTRAL);
         depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
         depositRotate.setPosition(DEPOSIT_ORIENTATION_ALIGNED);
     }
-
-    private void performHandoff() {
-//        Set claw pos
-        depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
-        depositRotate.setPosition(DEPOSIT_ORIENTATION_WALL);
-        liftMotor.setPower(1.0);
-        Sleeper.sleep(600);
-        liftMotor.setPower(1);
-        Sleeper.sleep(500);
-        liftMotor.setPower(0);
-        resetLift();
-    }
-
-    // Enum to specify movement type
-    private enum Movement {
-        STRAIGHT,
-        STRAFE
-    }
     
-    private void moveWithOdometry(double targetDistanceMM, Movement moveType) {
-        ElapsedTime timeout = new ElapsedTime();
-        timeout.reset();
-        
-        // Get initial position
-        odo.update();
-        Pose2D initialPose = odo.getPosition();
-        double startPos = (moveType == Movement.STRAIGHT) ? 
-                         initialPose.getX(DistanceUnit.MM) : 
-                         initialPose.getY(DistanceUnit.MM);
-        
-        while (opModeIsActive() && timeout.seconds() < 3.0) {
-            odo.update();
-            Pose2D currentPose = odo.getPosition();
-            double currentPos = (moveType == Movement.STRAIGHT) ? 
-                              currentPose.getX(DistanceUnit.MM) : 
-                              currentPose.getY(DistanceUnit.MM);
-            double distanceMoved = currentPos - startPos;
-            
-            // Calculate error and adjust power
-            double error = targetDistanceMM - distanceMoved;
-            double basePower = (moveType == Movement.STRAIGHT) ? MOVEMENT_POWER : STRAFE_POWER;
-            double power = Math.min(basePower, Math.abs(error / 50.0)) * Math.signum(error);
-            
-            // Check if we've reached target
-            if (Math.abs(error) < POSITION_TOLERANCE_MM) {
-                stopRobot();
-                break;
-            }
-            
-            // Apply powers based on movement type
-            if (moveType == Movement.STRAIGHT) {
-                setDrivePowers(power, power, power, power);
-            } else {  // STRAFE
-                // For mecanum wheels, opposite corners move in same direction
-                setDrivePowers(power, -power, -power, power);
-            }
-            
-            // Update telemetry
-            telemetry.addData("Movement Type", moveType);
-            telemetry.addData("Target Distance", targetDistanceMM);
-            telemetry.addData("Current Distance", distanceMoved);
-            telemetry.addData("Error", error);
-            telemetry.addData("Power", power);
-            telemetry.update();
-        }
-        
+    private void strafeLeft(long milliseconds) {
+        frontLeft.setPower(STRAFE_POWER);
+        backLeft.setPower(-STRAFE_POWER);
+        frontRight.setPower(-STRAFE_POWER);
+        backRight.setPower(STRAFE_POWER);
+        sleep(milliseconds);
         stopRobot();
     }
     
-    private void setDrivePowers(double fl, double fr, double bl, double br) {
-        frontLeft.setPower(fl);
-        frontRight.setPower(fr);
-        backLeft.setPower(bl);
-        backRight.setPower(br);
+    private void moveBackward(long milliseconds) {
+        frontLeft.setPower(DRIVE_POWER);
+        backLeft.setPower(DRIVE_POWER);
+        frontRight.setPower(DRIVE_POWER);
+        backRight.setPower(DRIVE_POWER);
+        sleep(milliseconds);
+        stopRobot();
+    }
+    
+    private void performHandoff() {
+        // Set claw pos
+        depositGrab.setPosition(DEPOSIT_GRAB_CLOSED);
+        depositRotate.setPosition(DEPOSIT_ORIENTATION_WALL);
+        sleep(100);
+        liftMotor.setPower(1.0);
+        sleep(600);
+        liftMotor.setPower(1);
+        sleep(500);
+        liftMotor.setPower(0);
+        resetLift();
     }
     
     private void stopRobot() {
-        setDrivePowers(0, 0, 0, 0);
+        frontLeft.setPower(0);
+        frontRight.setPower(0);
+        backLeft.setPower(0);
+        backRight.setPower(0);
     }
 } 

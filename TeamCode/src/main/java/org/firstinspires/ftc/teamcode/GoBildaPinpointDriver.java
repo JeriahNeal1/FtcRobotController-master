@@ -162,6 +162,28 @@ public class GoBildaPinpointDriver extends I2cDeviceSynchDevice<I2cDeviceSynchSi
         ONLY_UPDATE_HEADING,
     }
 
+    // Add Status enum
+    public enum Status {
+        READY,
+        CALIBRATING,
+        NOT_READY,
+        FAULT_NO_PODS_DETECTED,
+        FAULT_X_POD_NOT_DETECTED,
+        FAULT_Y_POD_NOT_DETECTED,
+        ERROR;
+
+        public static Status fromByte(byte value) {
+            switch(value) {
+                case 0: return READY;
+                case 1: return CALIBRATING;
+                case 2: return NOT_READY;
+                case 3: return FAULT_NO_PODS_DETECTED;
+                case 4: return FAULT_X_POD_NOT_DETECTED;
+                case 5: return FAULT_Y_POD_NOT_DETECTED;
+                default: return ERROR;
+            }
+        }
+    }
 
     /** Writes an int to the i2c device
     @param reg the register to write the int to
@@ -424,7 +446,10 @@ public class GoBildaPinpointDriver extends I2cDeviceSynchDevice<I2cDeviceSynchSi
      * FAULT_X_POD_NOT_DETECTED - The device does not detect an X pod plugged in. BLUE LED <br>
      * FAULT_Y_POD_NOT_DETECTED - The device does not detect a Y pod plugged in. ORANGE LED <br>
      */
-    public DeviceStatus getDeviceStatus(){return lookupStatus(deviceStatus); }
+    public Status getDeviceStatus() {
+        byte[] reply = deviceClient.read(Register.DEVICE_STATUS.bVal, 1);
+        return Status.fromByte(reply[0]);
+    }
 
     /**
      * Checks the Odometry Computer's most recent loop time.<br><br>

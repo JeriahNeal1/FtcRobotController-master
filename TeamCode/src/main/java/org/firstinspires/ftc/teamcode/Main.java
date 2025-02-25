@@ -83,6 +83,9 @@ public class Main extends OpMode {
     Toggle dpadLeftToggle  = new Toggle(); // Optional fine adjustment (DPad Left)
     Toggle dpadRightToggle = new Toggle(); // Optional fine adjustment (DPad Right)
 
+    // Add toggle for control inversion
+    Toggle selectToggle = new Toggle();
+
     // ------------------------------
     // Preset Positions for Servos
     // ------------------------------
@@ -144,6 +147,8 @@ public class Main extends OpMode {
     private boolean prevGamepad2A = false;
     // For detecting a rising edge on gamepad2.y (to trigger the auto flip routine only once per press)
     private boolean prevGamepad2Y = false;
+
+    private boolean controlsInversed = false;
 
     public boolean opModeIsActive() {
         return true;
@@ -293,12 +298,27 @@ public class Main extends OpMode {
         // ------------------------------
         double leftPower = gamepad1.left_stick_y;
         double rightPower = gamepad1.right_stick_y;
+        if (controlsInversed) {
+             leftPower = -gamepad1.right_stick_y;
+             rightPower = -gamepad1.left_stick_y;
+        }
+
         double strafePower = 0;
 
-        if (gamepad1.left_bumper) {
-            strafePower = 1;
-        } else if (gamepad1.right_bumper) {
-            strafePower = -1;
+        if (controlsInversed) {
+            // Invert bumper controls
+            if (gamepad1.right_bumper) {
+                strafePower = 1;
+            } else if (gamepad1.left_bumper) {
+                strafePower = -1;
+            }
+        } else {
+            // Normal bumper controls
+            if (gamepad1.left_bumper) {
+                strafePower = 1;
+            } else if (gamepad1.right_bumper) {
+                strafePower = -1;
+            }
         }
 
         frontLeft.setPower((leftPower + strafePower) * safetyScaleFactor);
@@ -468,6 +488,13 @@ public class Main extends OpMode {
         telemetry.addData("Y Reset Held", yReset);
         telemetry.addData("Deposit Orientation (DPad Up)", dpadUpToggle.toggled);
         telemetry.addData("Deposit Grab (DPad Down)", dpadDownToggle.toggled);
+
+        // Update select button toggle for control inversion
+        selectToggle.update(gamepad1.back);
+        controlsInversed = selectToggle.toggled;
+
+        // Add telemetry for control inversion status
+        telemetry.addData("Controls Inversed", controlsInversed);
         telemetry.update();
     }
 
